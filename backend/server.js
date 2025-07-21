@@ -3,6 +3,9 @@ const cors = require('cors');
 const crypto = require('crypto');
 require('dotenv').config();
 
+// Імпорт бота для парсингу локацій
+const LocationBot = require('./telegram-bot');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -113,4 +116,12 @@ app.get('/api/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Сервер запущено на порту ${PORT}`);
   console.log(`Канал для перевірки: ${process.env.TELEGRAM_CHANNEL}`);
+  
+  // Запускаємо бота для парсингу локацій
+  if (process.env.BOT_TOKEN && process.env.OPENAI_API_KEY) {
+    console.log('🤖 Запускаю Location Bot...');
+    new LocationBot();
+  } else {
+    console.log('⚠️ Location Bot не запущено - відсутні BOT_TOKEN або OPENAI_API_KEY');
+  }
 }); 
