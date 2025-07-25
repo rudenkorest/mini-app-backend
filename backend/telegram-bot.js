@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const OpenAI = require('openai');
+const BroadcastManager = require('./broadcast-manager');
 
 // Ініціалізація клієнтів
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -19,6 +20,7 @@ const HASHTAG_FILTER = '#заклад';
 
 class LocationBot {
   constructor() {
+    this.broadcastManager = new BroadcastManager(bot);
     this.setupBot();
   }
 
@@ -50,6 +52,70 @@ class LocationBot {
       result.link = this.generatePostLink({ message_id: 123 });
       
       ctx.reply(`✅ Результат:\n${JSON.stringify(result, null, 2)}`);
+    });
+
+    // Зберігаємо користувачів при будь-якій взаємодії
+    bot.use(async (ctx, next) => {
+      await this.broadcastManager.saveUser(ctx);
+      return next();
+    });
+
+    // Адмін команди для розсилок
+    bot.command('broadcast', async (ctx) => {
+      if (!this.broadcastManager.isAdmin(ctx.from.id)) {
+        return ctx.reply('❌ Ця команда доступна тільки адміністраторам');
+      }
+      
+      this.broadcastManager.startInteractiveBroadcast(ctx.from.id);
+      ctx.reply(`📢 Інтерактивна розсилка запущена!
+
+📝 Надішліть мені повідомлення, яке хочете відправити всім користувачам.
+
+💡 Підтримується:
+• HTML форматування (<b>жирний</b>, <i>курсив</i>)
+• Медіа файли (фото, відео, документи)
+• Комбінації тексту з медіа
+
+🚀 Просто надішліть готове повідомлення!`);
+    });
+
+    bot.command('stats', async (ctx) => {
+      if (!this.broadcastManager.isAdmin(ctx.from.id)) {
+        return ctx.reply('❌ Доступ заборонено');
+      }
+
+      const stats = await this.broadcastManager.getUserStats();
+      ctx.reply(`📊 Статистика користувачів:
+👥 Всього: ${stats.total}
+✅ Активних: ${stats.active}
+❌ Неактивних: ${stats.inactive}`);
+    });
+
+    // Обробка всіх повідомлень для інтерактивної розсилки
+    bot.on('message', async (ctx) => {
+      if (!this.broadcastManager.isAdmin(ctx.from.id)) {
+        return; // Ігноруємо не-адмінів
+      }
+
+      // Спробуємо обробити як частину інтерактивної розсилки
+      const handled = await this.broadcastManager.handleBroadcastMessage(ctx);
+      
+      if (!handled) {
+        // Якщо не обробили як розсилку, показуємо довідку
+        if (ctx.message.text && !ctx.message.text.startsWith('/')) {
+          ctx.reply(`💡 Використовуйте /broadcast для створення розсилки`);
+        }
+      }
+    });
+
+    // Обробка callback кнопок
+    bot.on('callback_query', async (ctx) => {
+      if (!this.broadcastManager.isAdmin(ctx.from.id)) {
+        await ctx.answerCbQuery('❌ Доступ заборонено');
+        return;
+      }
+
+      await this.broadcastManager.handleCallback(ctx);
     });
 
     // Запуск бота
