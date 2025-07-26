@@ -183,24 +183,20 @@ class LocationBot {
     try {
       // Перевіряємо фото
       if (message.photo && message.photo.length > 0) {
-        // Беремо найбільше фото
         const largestPhoto = message.photo[message.photo.length - 1];
-        const file = await bot.telegram.getFile(largestPhoto.file_id);
-        const imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-        imageUrls.push(imageUrl);
+        const uploadedUrl = await this.downloadAndUploadImage(largestPhoto.file_id);
+        if (uploadedUrl) imageUrls.push(uploadedUrl);
       }
 
       // Перевіряємо альбом фото
       if (message.media_group_id) {
-        // Для медіа-групи може потрібна додаткова логіка
         console.log('📸 Знайдено медіа-групу, обробляємо перше фото');
       }
 
       // Перевіряємо документи (якщо це зображення)
       if (message.document && message.document.mime_type && message.document.mime_type.startsWith('image/')) {
-        const file = await bot.telegram.getFile(message.document.file_id);
-        const imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-        imageUrls.push(imageUrl);
+        const uploadedUrl = await this.downloadAndUploadImage(message.document.file_id);
+        if (uploadedUrl) imageUrls.push(uploadedUrl);
       }
 
     } catch (error) {
@@ -208,6 +204,47 @@ class LocationBot {
     }
 
     return imageUrls;
+  }
+
+  // Новий метод для завантаження та збереження зображень в Supabase
+  async downloadAndUploadImage(fileId) {
+    try {
+      // 1. Отримуємо file_path від Telegram
+      const file = await bot.telegram.getFile(fileId);
+      const telegramUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+      
+      // 2. Завантажуємо файл
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(telegramUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const buffer = await response.buffer();
+      
+      // 3. Генеруємо унікальне ім'я файлу
+      const fileName = `avatars/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+      
+      // 4. Завантажуємо в Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('location-images')
+        .upload(fileName, buffer, {
+          contentType: 'image/jpeg',
+          cacheControl: '31536000' // 1 рік кешування
+        });
+
+      if (error) throw error;
+
+      // 5. Отримуємо публічний URL
+      const { data: urlData } = supabase.storage
+        .from('location-images')
+        .getPublicUrl(fileName);
+
+      console.log(`✅ Зображення збережено: ${urlData.publicUrl}`);
+      return urlData.publicUrl;
+
+    } catch (error) {
+      console.error(`❌ Помилка завантаження файлу ${fileId}:`, error);
+      return null;
+    }
   }
 
   generatePostLink(message) {
