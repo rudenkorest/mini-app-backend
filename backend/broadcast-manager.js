@@ -483,7 +483,7 @@ class BroadcastManager {
       }
     } else {
       // Без медіа - звичайне текстове повідомлення
-      await this.bot.telegram.sendMessage(userId, broadcast.message, messageOptions);
+    await this.bot.telegram.sendMessage(userId, broadcast.message, messageOptions);
     }
   }
 
