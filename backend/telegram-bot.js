@@ -149,7 +149,7 @@ class LocationBot {
 
       // Відправляємо фото з текстом та кнопками
       await ctx.replyWithPhoto(
-        'https://tkvtshoprhmgjrgvaeia.supabase.co/storage/v1/object/public/location-images//photo_2025-07-28%2014.12.00.jpeg',
+        'https://tkvtshoprhmgjrgvaeia.supabase.co/storage/v1/object/public/location-images/system%20images/Frame%201686561270.png',
         {
           caption: welcomeText,
           reply_markup: {
@@ -350,7 +350,6 @@ class LocationBot {
 - назва закладу, локації
 - опис, який має передати всю суть та цікавинку публікації, найчастіше ця інформація в першому абзаці, завжди намагатися описати 10 словами, перше слова має бути з великої літери.
 - адресу, у форматі Київ, вул. ***
-- широта та довгота цієї адреси
 
 ТЕКСТ ДЛЯ АНАЛІЗУ:
 ${text}
@@ -359,12 +358,10 @@ ${text}
 {
   "title": "назва закладу",
   "description": "короткий опис (максимум 10 слів)",
-  "address": "адреса у форматі Київ, вул. ***",
-  "latitude": 50.4501,
-  "longitude": 30.5234
+  "address": "адреса у форматі Київ, вул. ***"
 }
 
-Для координат використовуй реальні координати адреси в Києві. Якщо адреса неточна, використай приблизні координати району.`;
+ВАЖЛИВО: Не додавай координати - вони будуть отримані автоматично через Google Maps API.`;
 
       const completion = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
@@ -400,10 +397,16 @@ ${text}
         return null;
       }
 
-      // Перевірка координат
-      if (typeof locationData.latitude !== 'number' || typeof locationData.longitude !== 'number') {
-        console.error('❌ Некоректні координати від ChatGPT');
-        // Задаємо дефолтні координати центру Києва
+      // Геокодуємо адресу через Google Maps API
+      console.log('🗺️ Отримую координати через Google Maps API...');
+      const coords = await this.geocodeAddress(locationData.address);
+      
+      if (coords) {
+        locationData.latitude = coords.latitude;
+        locationData.longitude = coords.longitude;
+        console.log(`✅ Координати отримано: ${coords.latitude}, ${coords.longitude}`);
+      } else {
+        console.error('❌ Не вдалося отримати координати, використовую дефолтні');
         locationData.latitude = 50.4501;
         locationData.longitude = 30.5234;
       }
@@ -412,6 +415,42 @@ ${text}
 
     } catch (error) {
       console.error('❌ Помилка ChatGPT:', error);
+      return null;
+    }
+  }
+
+  // Додати нову функцію для геокодування
+  async geocodeAddress(address) {
+    try {
+      console.log('🗺️ Геокодую адресу через Google Maps API:', address);
+      
+      // Потрібно додати GOOGLE_MAPS_API_KEY в .env
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        console.error('❌ GOOGLE_MAPS_API_KEY не знайдено в .env');
+        return null;
+      }
+      
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address + ', Kyiv, Ukraine')}&key=${apiKey}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.results.length > 0) {
+        const location = data.results[0].geometry.location;
+        const coords = {
+          latitude: location.lat,
+          longitude: location.lng
+        };
+        console.log(`✅ Отримано точні координати: ${coords.latitude}, ${coords.longitude}`);
+        return coords;
+      } else {
+        console.error('❌ Помилка геокодування:', data.status);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Помилка геокодування:', error);
       return null;
     }
   }
