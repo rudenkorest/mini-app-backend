@@ -158,7 +158,7 @@ class LocationBot {
               [
                 {
                   text: '🗺️ Відкрити карту',
-                  web_app: { url: 'https://rudenkorest.github.io/mini-app/' }
+                  web_app: { url: 'https://map.gulyai-kyiv.com' }
                 }
               ]
             ]
